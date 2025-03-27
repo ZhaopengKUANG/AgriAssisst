@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plant Disease Prediction</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #000000;
+            color: #ffffff;
+            text-align: center;
+            padding: 20px;
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        h1 {
+            font-size: 1.8em;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 30px;
+        }
+        .upload-container {
+            margin: 20px 0;
+        }
+        .upload-btn {
+            display: inline-block;
+            padding: 10px 20px;
+            background-color: #1a2a3a;
+            color: #ffffff;
+            font-size: 1em;
+            font-weight: 500;
+            border: 1px solid #ffffff;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .upload-btn:hover {
+            background-color: #2a3a4a;
+        }
+        input[type="file"] {
+            display: none;
+        }
+        #preview {
+            margin-top: 20px;
+            max-width: 80%;
+            height: auto;
+            border-radius: 8px;
+            border: 1px solid #333333;
+            display: none;
+        }
+        .result-container {
+            margin-top: 20px;
+            width: 80%;
+            max-width: 400px;
+            background-color: #111111;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .result-header {
+            background-color: #000000;
+            padding: 10px;
+            font-size: 1em;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            border-bottom: 1px solid #333333;
+        }
+        #result {
+            padding: 15px;
+            font-size: 1.1em;
+            color: #cccccc;
+        }
+        #loading {
+            margin-top: 10px;
+            font-size: 0.9em;
+            color: #888888;
+            display: none;
+        }
+        .reset-btn {
+            display: none; /* Hidden until an image is analyzed */
+            margin-top: 20px;
+            padding: 10px 20px;
+            background-color: #1a2a3a;
+            color: #ffffff;
+            font-size: 1em;
+            font-weight: 500;
+            border: 1px solid #ffffff;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .reset-btn:hover {
+            background-color: #2a3a4a;
+        }
+    </style>
+</head>
+<body>
+    <h1>Plant Disease Detector</h1>
+    <div class="upload-container">
+        <label for="imageUpload" class="upload-btn">Upload Plant Image</label>
+        <input type="file" id="imageUpload" accept="image/*">
+    </div>
+    <img id="preview">
+    <div class="result-container">
+        <div class="result-header">Prediction Result</div>
+        <div id="result">Prediction will appear here</div>
+    </div>
+    <button id="resetBtn" class="reset-btn">Analyze Another Image</button>
+    <div id="loading">Loading model, please wait...</div>
+
+    <!-- Load TensorFlow.js library -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
+    <script>
+        let model;
+        const classNames = ['Healthy', 'Early Blight', 'Late Blight', 'bacterial spot'];
+
+        // Elements
+        const imageUpload = document.getElementById('imageUpload');
+        const preview = document.getElementById('preview');
+        const result = document.getElementById('result');
+        const resetBtn = document.getElementById('resetBtn');
+        const loadingDiv = document.getElementById('loading');
+
+        // Show loading message while model loads
+        loadingDiv.style.display = 'block';
+
+        // Load the model when the page starts
+        async function loadModel() {
+            const modelUrl = 'https://raw.githubusercontent.com/ZhaopengKUANG/AgriAssisst/main/model.json';
+            try {
+                model = await tf.loadLayersModel(modelUrl);
+                console.log('Model loaded');
+                loadingDiv.style.display = 'none';
+            } catch (error) {
+                console.error('Failed to load model:', error);
+                result.innerText = 'Error: Failed to load model. Please try again later.';
+                loadingDiv.style.display = 'none';
+            }
+        }
+
+        // Preprocess the image to match model input (224x224, normalized to [-1,1])
+        function preprocessImage(image) {
+            const tensor = tf.browser.fromPixels(image)
+                .resizeNearestNeighbor([224, 224])
+                .toFloat()
+                .div(tf.scalar(127.5))
+                .sub(tf.scalar(1));
+            return tensor.expandDims();
+        }
+
+        // Run prediction on the uploaded image
+        async function predict() {
+            const tensor = preprocessImage(preview);
+            const prediction = await model.predict(tensor).data();
+            const maxConfidence = Math.max(...prediction);
+            const predictedClassIndex = prediction.indexOf(maxConfidence);
+            const predictionText = `${classNames[predictedClassIndex]} (${(maxConfidence * 100).toFixed(2)}%)`;
+            result.innerText = predictionText;
+            resetBtn.style.display = 'block'; // Show reset button after prediction
+        }
+
+        // Reset the interface for a new image
+        function resetInterface() {
+            imageUpload.value = ''; // Clear the file input
+            preview.src = '';
+            preview.style.display = 'none';
+            result.innerText = 'Prediction will appear here';
+            resetBtn.style.display = 'none'; // Hide reset button
+        }
+
+        // Handle image upload
+        imageUpload.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                preview.src = URL.createObjectURL(file);
+                preview.style.display = 'block';
+                preview.onload = () => {
+                    if (model) {
+                        predict();
+                    } else {
+                        console.log('Model not loaded yet');
+                        result.innerText = 'Model is still loading, please wait...';
+                    }
+                };
+            }
+        });
+
+        // Handle reset button click
+        resetBtn.addEventListener('click', resetInterface);
+
+        // Start loading the model
+        loadModel();
+    </script>
+</body>
+</html>
